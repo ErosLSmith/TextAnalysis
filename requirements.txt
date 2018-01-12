@@ -39,7 +39,6 @@ prompt-toolkit==1.0.15
 ptyprocess==0.5.2
 py4j==0.10.4
 Pygments==2.2.0
-pylinkgrammar==0.2.14
 pyparsing==2.2.0
 pyspark==2.2.1
 python-dateutil==2.6.1
