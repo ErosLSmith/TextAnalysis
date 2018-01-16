@@ -12,6 +12,7 @@ websites = "[.](com|net|org|io|gov)"
 def split_into_sentences(text):
     text = " " + text + "  "
     text = text.replace("\n", " ")
+    text = text.replace("_", " ")
     text = re.sub(prefixes, "\\1<prd>", text)
     text = re.sub(websites, "<prd>\\1", text)
     if "Ph.D" in text:
@@ -42,13 +43,15 @@ def split_into_sentences(text):
     return sentences
 
 
-inputtext = open("poe.txt", "r")
-outputtext = open("poe_sents.txt", "w")
+suffix = 'txt'
+files = ['2147-0', '2148-0', '2149-0', '2150-0']
+outputfile = 'poe_sents.txt'
+outputtext = open(outputfile, "w")
 last_count = 0
-for s in split_into_sentences(inputtext.read()):
-    last_count = last_count + len(s)
-    s =
-    outputtext.write(s + " " + str(last_count) + "\n")
-
-inputtext.close()
+for file in files:
+    inputtext = open(file + ".txt", "r")
+    for s in split_into_sentences(inputtext.read()):
+        outputtext.write(s + " " + str(last_count) + "\n")
+        last_count = last_count + len(s.split())
+    inputtext.close()
 outputtext.close()
