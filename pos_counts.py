@@ -2,15 +2,16 @@
 
 
 from pyspark import SparkConf, SparkContext
+import functools
 from nltk.tokenize import word_tokenize
+from nltk.stem.wordnet import WordNetLemmatizer
 from nltk import pos_tag
 from nltk.corpus import stopwords
-# import csv
-# import io
+import os
+import shutil
 
-
+lemmatizer = WordNetLemmatizer()
 stopWords = set(stopwords.words('english'))
-len(stopWords)
 
 
 def pos_words(sentence):
@@ -22,23 +23,28 @@ def pos_words(sentence):
     return pos_tokens
 
 
-def isAdjective(wordTuple):
-    return (wordTuple[1][0] == 'JJ' and len(wordTuple[0]) > 1)\
-        and wordTuple[0] not in stopWords
+class PosChecker():
+    def isAdjective(wordTuple):
+        return (wordTuple[1][0] == 'JJ' and len(wordTuple[0]) > 1)\
+            and wordTuple[0] not in stopWords
+
+    def isNoun(wordTuple):
+        return (wordTuple[1][0] == 'NN' and len(wordTuple[0]) > 1)\
+            and wordTuple[0] not in stopWords
+
+    def isVerb(wordTuple):
+        return ('VB' in wordTuple[1][0] and len(wordTuple[0]) > 1)\
+            and wordTuple[0] not in stopWords
+
+    def isAdverb(wordTuple):
+        return ('RB' in wordTuple[1][0] and len(wordTuple[0]) > 1)\
+            and wordTuple[0] not in stopWords
 
 
-def isNoun(wordTuple):
-    return (wordTuple[1][0] == 'NN' and len(wordTuple[0]) > 1)\
-        and wordTuple[0] not in stopWords
-
-
-def isVerb(wordTuple):
-    return ('VB' in wordTuple[1][0] and len(wordTuple[0]) > 1)\
-        and wordTuple[0] not in stopWords
-
-
-def extractWord(wordTuple):
-    return (wordTuple[0], (1, wordTuple[1][1]))
+def extractWord(pos, wordTuple):
+    pos_dic = {'noun': 'n', 'adjective': 'a', 'verb': 'v', 'adverb': 'r'}
+    word = str(lemmatizer.lemmatize(wordTuple[0], pos_dic[pos])).lower()
+    return (word, (1, wordTuple[1][1]))
 
 
 def countWord(word1, word2):
@@ -54,16 +60,6 @@ def unpack(l):
     return (a[0], (a[1], [b]))
 
 
-# print(countWord((1, [8]), (1, [23])))
-
-s = "this line is a warm sentence. 4"
-
-
-# pos_tokens = pos_words(s)
-# for t in pos_tokens:
-#     print(t)
-#     if isAdjective(t):
-#         print(extractWord(t))
 conf = SparkConf()
 sc = SparkContext()
 suffix = '.txt'
@@ -77,31 +73,35 @@ for file in files:
         "org.apache.hadoop.io.LongWritable",
         "org.apache.hadoop.io.Text",
         conf={"textinputformat.record.delimiter": "\n"}).map(lambda l: l[1]))
-print(rdds[0].first())
 rdd = rdds[0]
 for part_rdd in rdds[1:]:
     rdd.union(part_rdd)
-nouns = rdd.flatMap(pos_words)
-print(nouns.first())
-nouns = nouns.filter(isNoun)
-# # print(nouns.first())
-nouns = nouns.map(extractWord)
-# print(nouns.first())
-noun_counts = nouns.reduceByKey(countWord)
-# print(noun_counts.first())
-noun_np = noun_counts.map(toNpArray)
-# f = noun_np.first()
-# print(f)
+words = rdd.flatMap(pos_words)
 
-# verbs = rdd.flatMap(pos_words).filter(isVerb).map(extractWord)
-# verb_counts = verbs.reduceByKey(countWord)
-# verb_np = verb_counts.map(toNpArray)
-# adjectives = rdd.flatMap(pos_words).filter(isAdjective).map(extractWord)
-# adjective_counts = adjectives.reduceByKey(countWord)
-# adjective_np = adjective_counts.map(toNpArray)
+pos = ["noun", "adjective", "verb", "adverb"]
 
-noun_np.saveAsTextFile("noun_counts.txt")
-# adjective_np.saveAsTextFile("adjective_counts.txt")
-# verb_np.saveAsTextFile("verb_counts.txt")
+cwd = os.getcwd()
+default_name = "part-00000"
+filesep = "/"
+
+for part in pos:
+    funcName = "is" + part.capitalize()
+    posFunc = getattr(PosChecker, funcName)
+    part_words = words.filter(posFunc)
+    extract = functools.partial(extractWord, part)
+    part_words = part_words.map(extract)
+    word_counts = part_words.reduceByKey(countWord)
+    np_counts = word_counts.map(toNpArray)
+    dirname = part + "_counts.txt"
+    foldername = cwd + filesep + dirname
+    if os.path.isdir(foldername):
+        shutil.rmtree(foldername)
+    np_counts.saveAsTextFile(dirname)
+    # rename the file
+    newfilename = part + "count.txt"
+    orginalfilename = foldername + filesep + default_name
+    renamedfilename = foldername + filesep + newfilename
+    os.rename(orginalfilename, renamedfilename)
+
 
 sc.stop()
