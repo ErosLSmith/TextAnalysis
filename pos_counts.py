@@ -1,7 +1,7 @@
 """This is a test file for python development"""
 
 
-from pyspark import SparkConf, SparkContext
+from pyspark import SparkContext
 import functools
 from nltk.tokenize import word_tokenize
 from nltk.stem.wordnet import WordNetLemmatizer
@@ -9,7 +9,20 @@ from nltk import pos_tag
 from nltk.corpus import stopwords
 import os
 import shutil
+import pandas as pd
+from pyspark.sql import SQLContext
+import atexit
+from glob import glob
 
+
+def exit_handler():
+    sc.stop()
+    print("exiting")
+
+
+# sc.stop()
+sc = SparkContext()
+atexit.register(exit_handler)
 lemmatizer = WordNetLemmatizer()
 stopWords = set(stopwords.words('english'))
 
@@ -20,6 +33,19 @@ def pos_words(sentence):
     stop = len(tokens) + start - 1
     pos_tokens = zip(tokens, range(start, stop))
     pos_tokens = map(unpack, pos_tokens)
+    return pos_tokens
+
+
+def pos_words_meta(row):
+    sentence_text = row['sentence_text']
+    sentence_number = row['Unnamed: 0']
+    tokens = pos_tag(word_tokenize(sentence_text))
+    start = int(tokens[-1][0])
+    stop = len(tokens) + start - 1
+    length = len(range(start, stop))
+    s = [sentence_number for i in range(length)]
+    pos_tokens = zip(tokens, range(start, stop), s)
+    pos_tokens = map(unpack_meta, pos_tokens)
     return pos_tokens
 
 
@@ -56,52 +82,109 @@ def toNpArray(wordCount):
 
 
 def unpack(l):
+    print(l)
     a, b = l
     return (a[0], (a[1], [b]))
 
 
-conf = SparkConf()
-sc = SparkContext()
-suffix = '.txt'
-files = ['poe_sents']
-rdds = []
-for file in files:
-    filename = file + suffix
-    rdds.append(sc.newAPIHadoopFile(
-        filename,
-        "org.apache.hadoop.mapreduce.lib.input.TextInputFormat",
-        "org.apache.hadoop.io.LongWritable",
-        "org.apache.hadoop.io.Text",
-        conf={"textinputformat.record.delimiter": "\n"}).map(lambda l: l[1]))
-rdd = rdds[0]
-for part_rdd in rdds[1:]:
-    rdd.union(part_rdd)
-words = rdd.flatMap(pos_words)
+def unpack_meta(l):
+    a, b, c = l
+    return (a[0], (a[1], [(b, c)]))
 
+
+def make_count_files_from_csv(file_name):
+    sql_sc = SQLContext(sc)
+    pandas_df = pd.read_csv(file_name, delimiter="|")
+    s_df = sql_sc.createDataFrame(pandas_df)
+    print(s_df.columns)
+    print(s_df.rdd.flatMap(pos_words_meta).first())
+    words = s_df.rdd.flatMap(pos_words_meta)
+    pos = ["noun", "adjective", "verb", "adverb"]
+
+    cwd = os.getcwd()
+    default_name = "part-00000"
+    filesep = "/"
+
+    for part in pos:
+        funcName = "is" + part.capitalize()
+        posFunc = getattr(PosChecker, funcName)
+        part_words = words.filter(posFunc)
+        extract = functools.partial(extractWord, part)
+        part_words = part_words.map(extract)
+        word_counts = part_words.reduceByKey(countWord)
+        np_counts = word_counts.map(toNpArray)
+        dirname = part + "_counts.txt"
+        foldername = cwd + filesep + dirname
+        if os.path.isdir(foldername):
+            shutil.rmtree(foldername)
+        np_counts.saveAsTextFile(dirname)
+        # rename the file
+        newfilename = part + "count.txt"
+        orginalfilename = foldername + filesep + default_name
+        renamedfilename = foldername + filesep + newfilename
+        os.rename(orginalfilename, renamedfilename)
+
+
+def make_count_files():
+    suffix = '.txt'
+    files = ['poe_sents']
+    rdds = []
+    for file in files:
+        filename = file + suffix
+        rdds.append(sc.newAPIHadoopFile(
+            filename,
+            "org.apache.hadoop.mapreduce.lib.input.TextInputFormat",
+            "org.apache.hadoop.io.LongWritable",
+            "org.apache.hadoop.io.Text",
+            conf={"textinputformat.record.delimiter": "\n"})
+            .map(lambda l: l[1]))
+    rdd = rdds[0]
+    for part_rdd in rdds[1:]:
+        rdd.union(part_rdd)
+    words = rdd.flatMap(pos_words)
+
+    pos = ["noun", "adjective", "verb", "adverb"]
+
+    cwd = os.getcwd()
+    filesep = "/"
+
+    for part in pos:
+        funcName = "is" + part.capitalize()
+        posFunc = getattr(PosChecker, funcName)
+        part_words = words.filter(posFunc)
+        extract = functools.partial(extractWord, part)
+        part_words = part_words.map(extract)
+        word_counts = part_words.reduceByKey(countWord)
+        np_counts = word_counts.map(toNpArray)
+        dirname = part + "_counts.txt"
+        foldername = cwd + filesep + dirname
+        if os.path.isdir(foldername):
+            shutil.rmtree(foldername)
+        np_counts.saveAsTextFile(dirname)
+        # rename the file
+        # newfilename = part + "count.txt"
+        # orginalfilename = foldername + filesep + default_name
+        # renamedfilename = foldername + filesep + newfilename
+        # os.rename(orginalfilename, renamedfilename)
+
+
+filename = "poeCompleteOrderedByDate.csv"
+print(os.path.isfile(filename))
+make_count_files_from_csv(filename)
+dirs = glob(os.getcwd() + "/*counts.txt")
 pos = ["noun", "adjective", "verb", "adverb"]
-
-cwd = os.getcwd()
-default_name = "part-00000"
-filesep = "/"
-
+cwd = os.getcwd() + "/"
 for part in pos:
-    funcName = "is" + part.capitalize()
-    posFunc = getattr(PosChecker, funcName)
-    part_words = words.filter(posFunc)
-    extract = functools.partial(extractWord, part)
-    part_words = part_words.map(extract)
-    word_counts = part_words.reduceByKey(countWord)
-    np_counts = word_counts.map(toNpArray)
-    dirname = part + "_counts.txt"
-    foldername = cwd + filesep + dirname
-    if os.path.isdir(foldername):
-        shutil.rmtree(foldername)
-    np_counts.saveAsTextFile(dirname)
-    # rename the file
-    newfilename = part + "count.txt"
-    orginalfilename = foldername + filesep + default_name
-    renamedfilename = foldername + filesep + newfilename
-    os.rename(orginalfilename, renamedfilename)
-
-
+    dirname = cwd + part + "_counts.txt"
+    files = glob(dirname + "/part-0000*")
+    with open(dirname + "/" + part + "count.txt", 'w') as outfile:
+        for fname in files:
+            with open(fname) as infile:
+                for line in infile:
+                    outfile.write(line)
 sc.stop()
+
+# w_map = pos_words_meta("I am a friendly sentence. 0")
+
+# for k, v in w_map:
+#     print((k, v))
