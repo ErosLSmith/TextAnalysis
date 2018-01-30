@@ -41,17 +41,3 @@ def split_into_sentences(text):
     sentences = sentences[:-1]
     sentences = [s.strip() for s in sentences]
     return sentences
-
-
-suffix = 'txt'
-files = ['2147-0', '2148-0', '2149-0', '2150-0']
-outputfile = 'poe_sents.txt'
-outputtext = open(outputfile, "w")
-last_count = 0
-for file in files:
-    inputtext = open(file + ".txt", "r")
-    for s in split_into_sentences(inputtext.read()):
-        outputtext.write(s + " " + str(last_count) + "\n")
-        last_count = last_count + len(s.split())
-    inputtext.close()
-outputtext.close()

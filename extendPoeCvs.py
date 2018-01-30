@@ -26,39 +26,51 @@ def add_missing_title_info_to_csv():
     scrape(url, "poeMetaData")
 
     with open('poeMetaData/poeMetaData_1.csv', 'a') as csvfile:
-        fieldnames = ["Title", "Publication date", "First published in",
-                      "Genre", "Notes"]
+        fieldnames = [
+            "Title", "Publication date", "First published in", "Genre", "Notes"
+        ]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writerow({"Title": """The Narrative Of Arthur
+        writer.writerow({
+            "Title":
+            """The Narrative Of Arthur
                          Gordon Pym Of Nantucket""",
-                         "Publication date": 'February 1837',
-                         "Genre": 'Adventure / Hoax'})
-        writer.writerow({"Title": 'An Enigma',
-                         "Publication date": 'March 1848',
-                         "Genre": 'Poetry'})
-        writer.writerow({"Title": 'Marginalia',
-                         "Publication date": '1846',
-                         "Genre": 'Essay'})
-        writer.writerow({"Title": 'Morning On The Wissahiccon',
-                         "Publication date": '1844',
-                         "Genre": 'Essay'})
-        writer.writerow({"Title": 'The Balloon-Hoax',
-                         "Publication date": 'April 13, 1844',
-                         "Genre": 'Hoax'})
+            "Publication date":
+            'February 1837',
+            "Genre":
+            'Adventure / Hoax'
+        })
+        writer.writerow({
+            "Title": 'An Enigma',
+            "Publication date": 'March 1848',
+            "Genre": 'Poetry'
+        })
+        writer.writerow({
+            "Title": 'Marginalia',
+            "Publication date": '1846',
+            "Genre": 'Essay'
+        })
+        writer.writerow({
+            "Title": 'Morning On The Wissahiccon',
+            "Publication date": '1844',
+            "Genre": 'Essay'
+        })
+        writer.writerow({
+            "Title": 'The Balloon-Hoax',
+            "Publication date": 'April 13, 1844',
+            "Genre": 'Hoax'
+        })
 
 
 def write_complete_sentence_csv():
     with open('poeComplete.csv', 'w') as csvoutfile:
         with open('poeMetaData/poeMetaData_1.csv') as csvfile:
             title_reader = csv.DictReader(csvfile)
-            fieldnames = ['sentence_text',
-                          'sentence_number',
-                          'paragraph_number',
-                          'title',
-                          'publication_date',
-                          'genre']
-            writer = csv.DictWriter(csvoutfile, fieldnames=fieldnames,
-                                    delimiter='|')
+            fieldnames = [
+                'sentence_text', 'sentence_number', 'paragraph_number',
+                'title', 'publication_date', 'genre'
+            ]
+            writer = csv.DictWriter(
+                csvoutfile, fieldnames=fieldnames, delimiter='|')
             writer.writeheader()
             # print(title_reader.fieldnames)
             titles = []
@@ -88,20 +100,23 @@ def write_complete_sentence_csv():
 # def order_complete_csv_by_date():
 with open('poeCompleteOrderedByDate.csv', 'w') as csvoutfile:
     filename = 'poeComplete.csv'
-    df = pd.read_csv(filename, header=0, sep="|",
-                     dtype={0: np.object_,
-                            1: np.object_,
-                            2: np.object_,
-                            3: np.object_,
-                            4: np.object_,
-                            5: np.object_})
+    df = pd.read_csv(
+        filename,
+        header=0,
+        sep="|",
+        dtype={
+            0: np.object_,
+            1: np.object_,
+            2: np.object_,
+            3: np.object_,
+            4: np.object_,
+            5: np.object_
+        })
     for idx, row in df.iterrows():
         df.loc[idx, 'publication_date'] = parse(str(row['publication_date']))
         genres = str(row['genre']).split(' / ')
         df.loc[idx, 'genre'] = genres
-    values = ['publication_date',
-              'paragraph_number',
-              'sentence_number']
+    values = ['publication_date', 'paragraph_number', 'sentence_number']
     df = df.sort_values(by=values, ascending=True).reset_index(drop=True)
     last_count = 0
     for idx, row in df.iterrows():
